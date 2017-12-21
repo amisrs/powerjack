@@ -1,8 +1,11 @@
+"use strict"
 var Discord = require("discord.js")
 var commander = require("commander")
 var uuidv4 = require("uuid/v4")
 var fs = require("fs");
 var async = require("async")
+var Deck = require("./deck.js")
+var Hand = require("./hand.js")
 
 var bot = new Discord.Client()
 
@@ -51,7 +54,7 @@ var parse_command = function(command, msg) {
     if(command[0].substring(1) == "create") {
         console.log("create")
 
-        bank_param = 100000
+        var bank_param = 100000
 
         if(Number.isInteger(parseInt(command[1]))) {
             bank_param = parseInt(command[1])
@@ -168,8 +171,9 @@ class Tournament {
             //players.push(new_player)
             return new_player
         })
+        this.callback = this.round_ended.bind(this)
 
-        this.start_game(this.round_ended.bind(this))
+        this.start_game(this.callback)
     }
 
     start_game(callback) {
@@ -191,7 +195,7 @@ class Tournament {
             // tournament end
 
         } else {
-            var next_round = new Round(this.channel, this.playing_players, callback)
+            var next_round = new Round(this.channel, this.playing_players, this.callback)
         }
     }
 
@@ -398,8 +402,11 @@ class Round {
                         title: round_player.player.user.username,
                         description: Deck.parse_cards(hand.cards) + "\n"
                     }})
-                    
+                    var message_sent = false
                     while(hand_alive) {
+                        if(message_sent) {
+                            continue
+                        }
                         var waiting_for_input = true
                         if(hand.check_twentyone() || hand.check_bust()) {
                             console.log("hand is won or bust (end turn)")
@@ -419,7 +426,9 @@ class Round {
                             title: round_player.player.user.username,
                             description: Deck.parse_cards(hand.cards) + "\n"
                         }})
-                            .then((message) => {
+                            .then(
+                                (message) => {
+                                message_sent = true
                                 message.createReactionCollector(
                                     (reaction, user) => reaction.emoji.name === hit_emoji && user.id == player.user.id,
                                     { max: 1 }
@@ -580,219 +589,5 @@ class RoundPlayer {
     }
 }
 
-class Hand {
-    constructor() {
-        //this.id
-        //this.is_dealer = is_dealer
-        this.cards = []
-        this.num_aces = 0
-        this.bet = 0
-    }
-    current_size() {
-        return this.cards.length
-    }
-
-    add_bet(amount) {
-        this.bet += amount
-    }
-
-    double_down() {
-        add_bet(this.bet)
-    }
-
-    get_values() {
-        console.log("Getting hand value...")
-        var value = 0
-        this.cards.forEach((card) => {
-            value += Deck.card_value(card)
-        })
-
-        var possible_values = []
-        for(var i=0; i<=this.num_aces; i++) {
-            console.log("    Hand class: possible value " + (value+(10*i)))
-            possible_values.push(value + (10*i))
-        }
-
-        return possible_values
-    }
-
-    check_bust() {
-        console.log("Checking bust")
-
-        var is_bust = true
-        var found_non_bust = false
-        this.get_values().forEach((value) => {
-            console.log("    Hand could be worth " + value)
-            console.log(value <= 21)
-            if(value <= 21) {
-                console.log(value + " is less than 21.")
-                found_non_bust = true
-
-                // if(value == 21) {
-                //     is_twentyone = true
-                // }
-            } else {
-                console.log(value + " is greater than 21.")
-            }
-        })
-        if(found_non_bust) {
-          is_bust = false
-        }
-        return is_bust
-    }
-
-
-
-    check_twentyone() {
-        console.log("Checking twentyone")
-        var is_twentyone = false
-        this.get_values().forEach((value) => {
-            console.log("    Hand could be worth " + value)
-            if(value == 21) {
-                is_twentyone = true
-            }
-        })
-        return is_twentyone
-    }
-
-    get_best_value() {
-        var closest = 99999
-        this.get_values().forEach((value) => {
-            if(21 - value < closest && value <= 21) {
-                closest = value
-            }
-        })
-        return closest
-    }
-
-    draw_card(deck) {
-        // may be different for dealer
-        var drawn_card = (deck.draw_cards(1)) // use initial hand size var
-        if(drawn_card % 13 == 0) {
-            this.num_aces++
-        }
-        this.cards = this.cards.concat(drawn_card)
-
-        return drawn_card
-    }
-
-    check_blackjack() {
-        if(this.current_size() == 2 && this.check_twentyone()) {
-            return true
-        }
-    }
-
-}
-
-class Deck {
-    // card values:
-    // 0-12 Diamonds
-    // 13-25 Clubs
-    // 26-38 Hearts
-    // 39-51 Spades
-
-    constructor(num_decks) {
-        this.num_decks = num_decks // blackjack might mix together multiple decks
-
-        this.cards = []
-        for(var i = 0; i < num_decks; i++) {
-            for(var j = 0; j < 52; j++) {
-                this.cards.push(j)
-            }
-        }
-        this.shuffle()
-
-    }
-
-    // fisher yates shuffle
-    shuffle() {
-        var j,x,i
-        for(i = 0; i < this.cards.length; i++) {
-            j = Math.floor(Math.random() * (i+1))
-            x = this.cards[j]
-            this.cards[j] = this.cards[i]
-            this.cards[i] = x
-        }
-    }
-
-    // pops a number of cards from the deck, and returns them in an array
-    draw_cards(num_cards) {
-        var draw = []
-        for(var i = 0; i < num_cards; i++) {
-            draw.push(this.cards.pop())
-        }
-        return draw
-    }
-
-    static card_value(number) {
-        var value = (number % 13) + 1
-        if(value > 10) {
-            value = 10
-        }
-
-        return value
-    }
-
-    static parse_cards(numbers) {
-        var emoji_string = ""
-        numbers.forEach((n) => {
-          emoji_string += this.parse_card(n) + "\n"
-        })
-        return emoji_string
-    }
-
-    static parse_card(number) {
-        var suit = ''
-        var value = 0
-        var emoji = ''
-
-        if(number <= 12) {
-            suit = '♦'
-        } else if (number <= 25) {
-            suit = '♣'
-        } else if (number <= 38) {
-            suit = '♥'
-        } else if (number <= 51) {
-            suit = '♠'
-        } else {
-            // what the hell
-        }
-
-        value = number % 13
-
-        // use a map.
-        if(value == 0) {
-            emoji = '🇦'
-        } else if (value == 1) {
-            emoji = ':two:'
-        } else if (value == 2) {
-            emoji = ':three:'
-        } else if (value == 3) {
-            emoji = ':four:'
-        } else if (value == 4) {
-            emoji = ':five:'
-        } else if (value == 5) {
-            emoji = ':six:'
-        } else if (value == 6) {
-            emoji = ':seven:'
-        } else if (value == 7) {
-            emoji = ':eight:'
-        } else if (value == 8) {
-            emoji = ':nine:'
-        } else if (value == 9) {
-            emoji = ':keycap_ten:'
-        } else if (value == 10) {
-            emoji = '🇯'
-        } else if (value == 11) {
-            emoji = '🇶'
-        } else if (value == 12) {
-            emoji = '🇰'
-        } else {
-            // what the hell
-        }
-
-        return emoji + suit
-    }
-}
 
 
