@@ -1,3 +1,6 @@
+// Main file
+// Connects to discord, reads input, and handles game loop.
+
 "use strict"
 var Discord = require("discord.js")
 var commander = require("commander")
@@ -29,27 +32,6 @@ const max_players = 8
 
 var parse_command = function(command, msg) {
 
-    // use string-argv
-    // 
-    // var argv = require('minimist')(stringArgv(command).slice(2)); // if using minimist
-
-
-    //
-    // var parser = new ArgumentParser({
-        //version: '0.0.1',
-        //addHelp:true,
-        //description: 'a'
-    //})
-    //parser.addArgument(
-    //    [ '-b', '--bank'],
-    //    {
-    //        //help: '$'    
-    //    }
-    //)
-    // etc
-    //
-    // var argv = parser.parseArgs();
-
 
     if(command[0].substring(1) == "create") {
         console.log("create")
@@ -62,50 +44,13 @@ var parse_command = function(command, msg) {
 
         create_game(msg, bank_param)
         
-        // wrong: how does the msg channel get to the commander?`
-
-        // )
-        //   .then(message => message.createReactionCollector(
-        //       (reaction) => reaction.emoji.name === join_emoji
-        //   )
-        //       .on('collect', r => console.log("Collected ${r.emoji.name}"))
-        //       .on('end', collected => console.log("Collected ${collected.size} items"))
-        //   )
-    }
-
-
-}
-
-// commander
-//     .command("create")
-//     .action(function() {
-//         console.log("create")
-//         create_game()
-//         // wrong: how does the msg channel get to the commander?`
-//         msg.channel.send("A game has been created. React to join:")
-//             .then(message => message.react(emoji))
-//             .then(message => message.createReactionCollector(
-//                 (reaction) => reaction.emoji.name === 'a'
-//             )
-//                 .on('collect', r => console.log("Collected ${r.emoji.name}"))
-//                 .on('end', collected => console.log("Collected ${collected.size} items"))
-//             )
-//     })
-//
-// commander
-//     .command("join")
-//     .action(function() {
-//         console.log("join")
-//     })
+ }
 
 // Listen for start
 bot.on("message", msg => {
     if(msg.content.startsWith("!") && msg.author.username != "powerjack") {
         var argv = msg.content.split(" ")
         console.log(argv)
-        //argv.shift() // get rid of "!pj"
-
-        // commander.parse(argv)
         parse_command(argv, msg)
     }
 })
@@ -113,6 +58,8 @@ bot.on("message", msg => {
 var create_game = function(msg, bank_param) {
     console.log("create game")
     var players = []
+
+
     msg.channel.send({ embed: {
         color: 3447003,
         description: "A game has been created. \n\n " + join_emoji + " Join \n" + confirm_emoji + " Start (host only)",
@@ -129,9 +76,7 @@ var create_game = function(msg, bank_param) {
             )
                 .on('collect', (r) => {
                     console.log("Collected ${r.emoji.name}")
-            //
                 })
-            //     //.on('end', collected => console.log("Collected ${collected.size} items"))
             message.createReactionCollector(
                 (reaction, user) => reaction.emoji.name === confirm_emoji && user.id === msg.author.id,
                 { max: 1 }
@@ -141,12 +86,9 @@ var create_game = function(msg, bank_param) {
                 })
                 .on('end', (r) => {``
                     console.log("End collection")
-                    //var reactions = r.message.reactions
-                    //console.log(r.array()[0].message)
 
                     var reacted_users = message.reactions.get(join_emoji).users
                     console.log(reacted_users)
-                    //new_game =  new Round(message.channel, reacted_users, bank_param)
                     new_tournament = new Tournament(message.channel, reacted_users, bank_param)
 
                 })
@@ -156,10 +98,10 @@ var create_game = function(msg, bank_param) {
 
 }
 
+// tournament = series of rounds
 class Tournament {
     constructor(channel, players, bank_param) {
         this.channel = channel
-        //this.playing_players = []
         this.eliminated_players = []
 
         this.rounds = []
@@ -168,20 +110,19 @@ class Tournament {
 
         this.playing_players = players.map((player) => {
             var new_player = new Player(player, bank_param)
-            //players.push(new_player)
             return new_player
         })
-        this.callback = this.round_ended.bind(this)
 
+        // tell the Tournament whenever a round ends
+        // 
+        this.callback = this.round_ended.bind(this)
         this.start_game(this.callback)
     }
 
+    //following functions belong to each tournament object
+ 
     start_game(callback) {
-        
-
-
         var first_round = new Round(this.channel, this.playing_players, callback)
-
     }
 
     round_ended(round) {
@@ -191,20 +132,18 @@ class Tournament {
             // eliminate poorest player
         }
 
+
         if(this.rounds.length >=  this.max_rounds) {
             // tournament end
 
         } else {
+            // every new round should have the same callback to the Tournament
             var next_round = new Round(this.channel, this.playing_players, this.callback)
         }
     }
 
     add_player(player) {
         this.playing_players.push(player)
-
-        // if(this.players.size == max_players) {
-        //     start_game()
-        // }
     }
 
     remove_player(player) {
